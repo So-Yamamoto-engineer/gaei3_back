@@ -9,8 +9,13 @@ import io
 import torch
 from flask import Flask, request, session, jsonify
 from PIL import Image
-from flask_sqlalchemy import SQLAlchemy
+
 from flask_cors import CORS
+
+# db関連
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+from flask_migrate import Migrate
 
 # ログイン関連
 from flask_bcrypt import Bcrypt
@@ -37,12 +42,13 @@ def handle_options():
 bcrypt = Bcrypt(app)
 
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.todo'
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'db.todo')}"
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'db.cook_app')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 
 db = SQLAlchemy()
 db.init_app(app)  
+migrate = Migrate(app, db)
 
 class ToDo(db.Model):
 	id = db.Column(db.Integer, primary_key=True)
@@ -50,8 +56,29 @@ class ToDo(db.Model):
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(128),unique=True, nullable=False)
+    username = db.Column(db.String(128), unique=True, nullable=False)
     password = db.Column(db.String(128), nullable=False)
+    recipes = db.relationship('Recipe', backref='author', lazy=True)  # リレーション
+
+class Recipe(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 作った人
+    name = db.Column(db.String(128), nullable=False)  # 料理名
+    steps = db.Column(db.JSON, nullable=False)  # レシピの手順（配列として格納）
+    likes = db.Column(db.Boolean, default=False)  # 自分用の「いいね」
+    ingredients = db.Column(db.JSON, nullable=True)  # 食材リスト（オプション）
+    image_url = db.Column(db.String(256), nullable=True)  # 画像のURL（オプション）
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # 作成日時
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # 更新日時
+    description = db.Column(db.Text, nullable=True)  # 説明（オプション）
+# flask db init
+# flask db migrate -m "Add Recipe table"
+# flask db upgrade
+# from app import db
+# print(db.engine.table_names())  # 既存のテーブル一覧を出力
+# flask db downgrade base  # 全ての変更を元に戻す
+# flask db upgrade          # 再度適用
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -86,7 +113,7 @@ def login():
         return jsonify({"message": "Login successful!"}), 200
     else:
         # 認証失敗
-        return jsonify({"message": "Invalid username or password"}), 401
+        return jsonify({"message": "ユーザー名またはパスワードが違います。"}), 401
 
 
 @app.route('/logout', methods=['POST'])
