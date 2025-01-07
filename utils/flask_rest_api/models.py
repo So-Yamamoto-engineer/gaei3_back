@@ -21,10 +21,8 @@ class Recipe(db.Model):
     steps = db.Column(db.JSON, nullable=False)
     likes = db.Column(db.Boolean, default=False)
     ingredients = db.Column(db.JSON, nullable=True)
-    image_url = db.Column(db.String(256), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    description = db.Column(db.Text, nullable=True)
 
 
 # flask db init

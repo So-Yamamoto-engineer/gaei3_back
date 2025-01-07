@@ -47,7 +47,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
 
 # db関連
-db = SQLAlchemy()
+# db = SQLAlchemy()
 db.init_app(app)  
 
 @app.route('/register', methods=['POST'])
@@ -76,6 +76,7 @@ def login():
 
     # ユーザーが存在するか確認
     user = User.query.filter_by(username=username).first()
+    print(user)
     if user and check_password_hash(user.password, password):
         # 認証成功: セッションにユーザー情報を保存
         session['user_id'] = user.id
@@ -92,7 +93,18 @@ def logout():
     session.pop('username', None)
     return jsonify({"message": "Logged out successfully!"}), 200
 
+@app.route('/api/users/<string:username>/recipes', methods=['GET'])
+def get_user_recipes(username):
+    # ユーザーの存在を確認
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        abort(404, description="User not found")
 
+    # ユーザーのレシピを取得
+    recipes = Recipe.query.filter_by(user_id=user.id).all()
+    recipe_list = [{"id": recipe.id, "name": recipe.name} for recipe in recipes]
+
+    return jsonify(recipe_list)
 
 models = {}
 DETECTION_URL = "/v1/object-detection/<model>"
