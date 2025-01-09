@@ -26,6 +26,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 CORS(app)
+
 @app.before_request
 def handle_options():
     if request.method == "OPTIONS":
@@ -49,6 +50,11 @@ app.config['SECRET_KEY'] = os.urandom(24)
 # db関連
 # db = SQLAlchemy()
 db.init_app(app)  
+
+@app.route('/', methods=['GET'])
+def hello():
+    return "Server is running on the web!"
+
 
 @app.route('/register', methods=['POST'])
 def register():

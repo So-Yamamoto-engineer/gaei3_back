@@ -31,4 +31,4 @@ class Recipe(db.Model):
 # from app import db
 # print(db.engine.table_names())  # 既存のテーブル一覧を出力
 # flask db downgrade base  # 全ての変更を元に戻す
-# flask db upgrade          # 再度適用
+# flask db upgrade          # 再度適用x
