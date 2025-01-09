@@ -1,5 +1,6 @@
 # Ultralytics YOLOv5 🚀, AGPL-3.0 license
 """Run a Flask REST API exposing one or more YOLOv5s models."""
+import sys
 import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # スクリプトのディレクトリを取得
 
@@ -24,9 +25,11 @@ from flask_login import LoginManager, UserMixin
 # 登録関連
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# app初期化
 app = Flask(__name__)
 CORS(app)
 
+# http methodの限定
 @app.before_request
 def handle_options():
     if request.method == "OPTIONS":
@@ -42,20 +45,23 @@ def handle_options():
 # ログイン関連
 bcrypt = Bcrypt(app)
 
+# db関連
+# db初期化
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.todo'
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'db.cook_app')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.urandom(24)
-
-# db関連
 # db = SQLAlchemy()
 db.init_app(app)  
 
+# ここからルーティング設定
+
+# トップページ
 @app.route('/', methods=['GET'])
 def hello():
     return "Server is running on the web!"
 
-
+# 新規登録ページ
 @app.route('/register', methods=['POST'])
 def register():
     data = request.json
@@ -74,6 +80,7 @@ def register():
     db.session.commit()
     return jsonify({"message": "User registered successfully!"}), 201
 
+# login page
 @app.route('/login', methods=['POST'])
 def login():
     data = request.json  # フロントエンドからJSONデータを受け取る
@@ -92,12 +99,14 @@ def login():
         # 認証失敗
         return jsonify({"message": "ユーザー名またはパスワードが違います。"}), 401
 
+# logout page
 @app.route('/logout', methods=['POST'])
 def logout():
     session.pop('user_id', None)  # セッションからユーザー情報を削除
     session.pop('username', None)
     return jsonify({"message": "Logged out successfully!"}), 200
 
+# user recipe page
 @app.route('/api/users/<string:username>/recipes', methods=['GET'])
 def get_user_recipes(username):
     # ユーザーの存在を確認
