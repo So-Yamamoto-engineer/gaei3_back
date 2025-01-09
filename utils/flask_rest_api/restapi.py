@@ -92,7 +92,6 @@ def login():
         # 認証失敗
         return jsonify({"message": "ユーザー名またはパスワードが違います。"}), 401
 
-
 @app.route('/logout', methods=['POST'])
 def logout():
     session.pop('user_id', None)  # セッションからユーザー情報を削除
