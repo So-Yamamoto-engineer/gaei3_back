@@ -149,8 +149,6 @@ def map_location_fix(storage, location):
         return pathlib.PosixPath(location)
     return location
 
-app = Flask(__name__)
-
 #モデルディレクトリを指定する位置を移動
 #MODEL_DIR = "/mnt/host_files"
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')) + "/best"
@@ -218,8 +216,8 @@ def predict():
             print(f"モデル {model_name} の推論中にエラー: {e}")
             all_predictions.append({"model": model_name, "error": str(e)})
 
-    # return jsonify(all_predictions)
-    return jsonify(["にんじん"])
+    return jsonify(all_predictions)
+    # return jsonify(["にんじん"])
 ####################################################################
 
 
