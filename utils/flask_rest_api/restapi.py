@@ -149,6 +149,8 @@ def map_location_fix(storage, location):
         return pathlib.PosixPath(location)
     return location
 
+#app = Flask(__name__)
+
 #モデルディレクトリを指定する位置を移動
 #MODEL_DIR = "/mnt/host_files"
 MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')) + "/best"
@@ -160,6 +162,7 @@ model_mapping = []
 # デバイスの選択
 device = select_device('cuda' if torch.cuda.is_available() else 'cpu')
 # モデルを動的にロード
+'''
 for file in os.listdir(MODEL_DIR):
     if file.endswith(".pt"):
         model_path = Path(MODEL_DIR) / file
@@ -176,13 +179,36 @@ for file in os.listdir(MODEL_DIR):
         start_index = len(unified_labels)
         unified_labels.extend(labels)
         model_mapping.append({i: start_index + i for i in range(len(labels))})
+'''
+for file in os.listdir(MODEL_DIR):
+    if file.endswith(".pt"):
+        model_path = Path(MODEL_DIR) / file
+        model_name = os.path.splitext(file)[0]
+        try:
+            # DetectMultiBackend のロード
+            model = DetectMultiBackend(str(model_path), device=device)
+        except Exception as e:
+            print(f"モデル {file} のロード中にエラー: {e}")
+            continue
+
+        # モデルを `models` に格納
+        models[model_name] = {
+            "model": model,
+            "labels": model.names,  # ラベル名を格納
+        }
+
+        labels = model.names
+        start_index = len(unified_labels)
+        unified_labels.extend(labels)
+        model_mapping.append({i: start_index + i for i in range(len(labels))})
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
     # ここで画像ファイルを指定
     # file_path = "/yolov5/best/rei2.jpg"
     file = request.files['image']  # フロントエンドから送信されたファイルを取得
-    file_path = f"/Users/so/coding/react-project/back/uploads/{file.filename}"  # 一時保存用のパス
+    file_path = f"/gaei3_back/uploads/{file.filename}"  # 一時保存用のパス
     file.save(file_path)  # 画像ファイルを保存
 
     # 画像処理
@@ -194,7 +220,7 @@ def predict():
     img = torch.from_numpy(img).unsqueeze(0).to(device)
 
     all_predictions = []
-
+    '''
     for model_name, model in models.items():
         try:
             results = model(img)  # 推論
@@ -204,20 +230,80 @@ def predict():
             # with open(output_file, "w") as f:
             #     f.write(str(results))  # results全体を文字列に変換して保存
             predictions = []  # 各モデルの予測結果を格納
-            for i, det in enumerate(results.pandas().xyxy[0]):  # 各予測結果を処理
-                predictions.append({
-                    "class_id": int(det[5]),  # クラスID
-                    "label": unified_labels[int(det[5])],  # ラベル名
-                    "confidence": float(det[4]),  # 信頼度
-                    "bbox": det[:4].tolist(),  # バウンディングボックス [x, y, w, h]
-                })
+            #print(results)
+        
+            for i, det in enumerate(results):  # 各予測結果を処理
+                #print("det[0] の shape:", det[0].shape)  # det[0] の形状を確認
+                #print("det[0] の内容:", det[0])
+
+                # det[0] の各行を処理
+                for row in det[0]: # 各行が1つの予測結果
+                    if len(row) < 5:
+                        print(f"警告: row の長さが不足しています (row: {row})")
+                        continue
+                    bbox = row[:4]  # バウンディングボックス [x_min, y_min, x_max, y_max]
+                    confidence = row[4]  # 信頼度スコア
+                    class_scores = row[5:]  # クラススコア
+                    #print(row[2])
+                    if class_scores.numel() > 0:  # クラススコアが空でない場合
+                        class_id = int(torch.argmax(class_scores))  # 最も高いスコアのクラスID
+                        #print(class_id)
+                        predictions.append({
+                            "class_id": class_id,
+                            "label": unified_labels[class_id],
+                            "confidence": float(confidence),
+                            "bbox": bbox.tolist(),
+                        })
+                    else:
+                        print("警告: クラススコアが空です (row:", row, ")")
             all_predictions.append({"model": model_name, "predictions": predictions})
         except Exception as e:
             print(f"モデル {model_name} の推論中にエラー: {e}")
             all_predictions.append({"model": model_name, "error": str(e)})
+    '''
+    for model_name, model_data in models.items():
+        model = model_data["model"]
+        labels = model_data["labels"]  # ラベル名を取得
 
-    return jsonify(all_predictions)
-    # return jsonify(["にんじん"])
+        try:
+            results = model(img)  # 推論
+            predictions = []
+            threshold = 0.5 
+            for i, det in enumerate(results):  # 各予測結果を処理
+                for row in det[0]:  # 各行が1つの予測結果
+                    if len(row) < 5:
+                        print(f"警告: row の長さが不足しています (row: {row})")
+                        continue
+
+                    bbox = row[:4]  # バウンディングボックス
+                    confidence = row[4]  # 信頼度スコア
+                    if confidence >= threshold:  # 信頼度が閾値を超えている場合のみ
+                        class_scores = row[5:]
+                        if class_scores.numel() > 0:
+                            class_id = int(torch.argmax(class_scores))
+                            label = labels[class_id]
+                            predictions.append(label)
+                        else:
+                            print("警告: クラススコアが空です (row:", row, ")")
+                    '''
+                    class_scores = row[5:]  # クラススコア
+                    if class_scores.numel() > 0:  # クラススコアが空でない場合
+                        class_id = int(torch.argmax(class_scores))
+                        label = labels[class_id]  # ラベル名を取得
+                        
+                        predictions.append(label)
+                    '''
+            predictions = list(set(predictions))
+            all_predictions.append(predictions)
+        except Exception as e:
+            print(f"モデル {model_name} の推論中にエラー: {e}")
+            all_predictions.append({"model": model_name, "error": str(e)})
+    flattened_predictions = [item for sublist in all_predictions for item in sublist]
+    print(flattened_predictions)
+    return jsonify(flattened_predictions)
+    
+
+    #return jsonify(["にんじん"])
 ####################################################################
 
 
