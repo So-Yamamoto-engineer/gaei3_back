@@ -3,7 +3,6 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_migrate import Migrate
 
-# SQLAlchemyのインスタンスを作成
 db = SQLAlchemy()
 
 # Userモデルの定義
