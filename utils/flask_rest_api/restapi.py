@@ -202,12 +202,10 @@ for file in os.listdir(MODEL_DIR):
         unified_labels.extend(labels)
         model_mapping.append({i: start_index + i for i in range(len(labels))})
 
-
 @app.route('/predict', methods=['POST'])
 def predict():
-    # ここで画像ファイルを指定
-    # file_path = "/yolov5/best/rei2.jpg"
-    file = request.files['image']  # フロントエンドから送信されたファイルを取得
+    # フロントエンドから送信された画像ファイルを取得
+    file = request.files['image']  
     file_path = f"/gaei3_back/uploads/{file.filename}"  # 一時保存用のパス
     file.save(file_path)  # 画像ファイルを保存
 
@@ -220,47 +218,7 @@ def predict():
     img = torch.from_numpy(img).unsqueeze(0).to(device)
 
     all_predictions = []
-    '''
-    for model_name, model in models.items():
-        try:
-            results = model(img)  # 推論
-            # output_dir = "output"  # 出力先ディレクトリ
-            # os.makedirs(output_dir, exist_ok=True)  # ディレクトリがなければ作成
-            # output_file = os.path.join(output_dir, f"results.txt")
-            # with open(output_file, "w") as f:
-            #     f.write(str(results))  # results全体を文字列に変換して保存
-            predictions = []  # 各モデルの予測結果を格納
-            #print(results)
-        
-            for i, det in enumerate(results):  # 各予測結果を処理
-                #print("det[0] の shape:", det[0].shape)  # det[0] の形状を確認
-                #print("det[0] の内容:", det[0])
 
-                # det[0] の各行を処理
-                for row in det[0]: # 各行が1つの予測結果
-                    if len(row) < 5:
-                        print(f"警告: row の長さが不足しています (row: {row})")
-                        continue
-                    bbox = row[:4]  # バウンディングボックス [x_min, y_min, x_max, y_max]
-                    confidence = row[4]  # 信頼度スコア
-                    class_scores = row[5:]  # クラススコア
-                    #print(row[2])
-                    if class_scores.numel() > 0:  # クラススコアが空でない場合
-                        class_id = int(torch.argmax(class_scores))  # 最も高いスコアのクラスID
-                        #print(class_id)
-                        predictions.append({
-                            "class_id": class_id,
-                            "label": unified_labels[class_id],
-                            "confidence": float(confidence),
-                            "bbox": bbox.tolist(),
-                        })
-                    else:
-                        print("警告: クラススコアが空です (row:", row, ")")
-            all_predictions.append({"model": model_name, "predictions": predictions})
-        except Exception as e:
-            print(f"モデル {model_name} の推論中にエラー: {e}")
-            all_predictions.append({"model": model_name, "error": str(e)})
-    '''
     for model_name, model_data in models.items():
         model = model_data["model"]
         labels = model_data["labels"]  # ラベル名を取得
@@ -268,39 +226,81 @@ def predict():
         try:
             results = model(img)  # 推論
             predictions = []
-            threshold = 0.5 
-            for i, det in enumerate(results):  # 各予測結果を処理
-                for row in det[0]:  # 各行が1つの予測結果
+            threshold = 0.5  # 信頼度の閾値
+
+            for det in results[0]:  # 各予測結果を処理
+                if det is None or len(det) == 0:
+                    continue  # 予測結果がない場合スキップ
+                
+                for row in det:
                     if len(row) < 5:
                         print(f"警告: row の長さが不足しています (row: {row})")
                         continue
 
-                    bbox = row[:4]  # バウンディングボックス
-                    confidence = row[4]  # 信頼度スコア
+                    bbox = tuple(row[:4].tolist())  # バウンディングボックス（タプルに変換）
+                    confidence = row[4].item()  # 信頼度スコア
+
                     if confidence >= threshold:  # 信頼度が閾値を超えている場合のみ
                         class_scores = row[5:]
                         if class_scores.numel() > 0:
                             class_id = int(torch.argmax(class_scores))
                             label = labels[class_id]
-                            predictions.append(label)
+
+                            # 既存の物体との重複をチェック
+                            existing = next(
+                                (p for p in predictions if iou(p["bbox"], bbox) > 0.5),
+                                None
+                            )
+
+                            if existing:
+                                # 信頼度を比較して高い方を優先
+                                if confidence > existing["confidence"]:
+                                    existing["confidence"] = confidence
+                                    existing["label"] = label
+                            else:
+                                # 新規エントリとして追加
+                                predictions.append({
+                                    "bbox": bbox,
+                                    "confidence": confidence,
+                                    "label": label
+                                })
                         else:
                             print("警告: クラススコアが空です (row:", row, ")")
-                    '''
-                    class_scores = row[5:]  # クラススコア
-                    if class_scores.numel() > 0:  # クラススコアが空でない場合
-                        class_id = int(torch.argmax(class_scores))
-                        label = labels[class_id]  # ラベル名を取得
-                        
-                        predictions.append(label)
-                    '''
-            predictions = list(set(predictions))
-            all_predictions.append(predictions)
+
+            # 物体ごとのラベルをリストに追加
+            all_predictions.extend([p["label"] for p in predictions])
+
         except Exception as e:
             print(f"モデル {model_name} の推論中にエラー: {e}")
             all_predictions.append({"model": model_name, "error": str(e)})
-    flattened_predictions = [item for sublist in all_predictions for item in sublist]
-    print(flattened_predictions)
-    return jsonify(flattened_predictions)
+
+    # **同じラベルを1つのみにする**
+    unique_labels = list(set(all_predictions))
+
+    print(unique_labels)
+    return jsonify(unique_labels)
+
+
+def iou(bbox1, bbox2):
+    """2つのバウンディングボックスのIoU（交差部分の割合）を計算"""
+    x1 = max(bbox1[0], bbox2[0])
+    y1 = max(bbox1[1], bbox2[1])
+    x2 = min(bbox1[2], bbox2[2])
+    y2 = min(bbox1[3], bbox2[3])
+
+    # 交差領域の幅と高さを計算
+    intersection_width = max(0, x2 - x1)
+    intersection_height = max(0, y2 - y1)
+    intersection_area = intersection_width * intersection_height
+
+    # 各バウンディングボックスの面積を計算
+    bbox1_area = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1])
+    bbox2_area = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
+
+    # IoUを計算
+    union_area = bbox1_area + bbox2_area - intersection_area
+    return intersection_area / union_area if union_area > 0 else 0
+
     
 
     #return jsonify(["にんじん"])
